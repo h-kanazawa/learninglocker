@@ -1,0 +1,63 @@
+steps:
+  - name: gcr.io/cloud-builders/git
+    args: ['fetch', '--unshallow', '--no-tags']
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull eu.gcr.io/$PROJECT_ID/learninglocker.build:latest || exit 0
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '-f', 'Dockerfile.build',
+      '-t', 'eu.gcr.io/$PROJECT_ID/learninglocker.build',
+      '--cache-from', 'eu.gcr.io/$PROJECT_ID/learninglocker.build:latest',
+      '.'
+    ]
+
+  - name: 'gcr.io/cloud-builders/gsutil'
+    entrypoint: 'bash'
+    args: ['cloudbuild-download-nodemodules.sh']
+
+  - name: 'eu.gcr.io/$PROJECT_ID/learninglocker.build'
+    args: ['install']
+
+  - name: 'gcr.io/cloud-builders/gsutil'
+    entrypoint: 'bash'
+    args: ['cloudbuild-upload-nodemodules.sh']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cp .env.example .env && sed -i -e 's/APP_SECRET=/APP_SECRET=1234567890ABCDEF9876543210ABC/' .env
+
+  - name: 'gcr.io/cloud-builders/gsutil'
+    entrypoint: 'bash'
+    args: ['cloudbuild-download-dist.sh']
+
+  - name: 'eu.gcr.io/$PROJECT_ID/learninglocker.build'
+    entrypoint: 'sh'
+    args: ['cloudbuild-build-dist.sh']
+
+  - name: 'gcr.io/cloud-builders/gsutil'
+    entrypoint: 'bash'
+    args: ['cloudbuild-upload-dist.sh']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '-f', 'Dockerfile',
+      '-t', 'eu.gcr.io/$PROJECT_ID/learninglocker:$BRANCH_NAME',
+      '.'
+    ]
+    timeout: 1200s
+
+timeout: 1200s
+
+images: [
+  'eu.gcr.io/$PROJECT_ID/learninglocker.build:latest',
+  'eu.gcr.io/$PROJECT_ID/learninglocker:$BRANCH_NAME'
+]
